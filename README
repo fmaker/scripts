@@ -1,0 +1,10 @@
+plotcsv
+----------------------------------------------------------------------------------------------------
+Description: python script to do some simple GNUplots.
+Requirements: Python
+              GNUplot (Python gnuplot module uses shell pipe to control)
+License:      BSD License
+              http://creativecommons.org/licenses/BSD/
+
+Copyright 2010, Regents of the University of California
+
