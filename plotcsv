@@ -1,0 +1,137 @@
+#!/usr/bin/env python
+import sys
+import Gnuplot, Gnuplot.funcutils
+
+# Parse options and arguments
+from optparse import OptionParser
+parser = OptionParser("Usage: %s file.csv ..." %(sys.argv[0]))
+parser.add_option("-t", "--title",dest="title", help="title for graph")
+parser.add_option("-c", "--cols",dest="columns", help="columns for graph (x:y1:y2:y3)")
+parser.add_option("-l", "--lines",dest="useLines", action="store_true", help="Use lines for graph")
+parser.add_option("-o", "--output",dest="outputFile", help="Name for output file (EPS)")
+parser.add_option("-v", "--verbose",dest="verbose", action="store_true", help="verbose output")
+parser.add_option("-d", "--default-titles",action="store_true",dest="default_titles",help="default plot titles")
+parser.add_option("-p", "--plot-titles",type="string",dest="plot_titles",help="plot titles seperated by colons i.e title1:title2:title3")
+parser.add_option("-a", "--accumulate",action="store_true",dest="accumulate",help="accumulate y axis value")
+parser.add_option("-x", "--x-axis-title",type="string",dest="xaxis_title",help="title for x-axis")
+parser.add_option("-r", "--x-range",type="string",dest="xrange",help="x range (ex. \"-10:10\")")
+parser.add_option("-w", "--horizontal-lines",type="string",dest="horiz_lines",help="horizontal lines to draw (1:2:3 -> y=1, y=2, y=3)")
+parser.add_option("-y", "--y-axis-title",type="string",dest="yaxis_title",help="title for y-axis")
+parser.add_option("-s", "--y-range",type="string",dest="yrange",help="y range (ex. \"-10:10\"")
+parser.add_option("-e", "--percent-diff-of-x",action="store_true",dest="percent_of_x",help="plot y percent of diff of x")
+parser.add_option("-f", "--percent-of-const",type="string",dest="percent_const",help="plot y as percent of constant value") 
+parser.add_option("-g", "--percent-of-col",type="string",dest="percent_col",help="plot y as percent of column")
+parser.add_option("-m", "--y-in-minutes",action="store_true",dest="y_in_mins",help="plot y in minutes (Divide by 60)")
+parser.add_option("-b", "--accumulate-and-divide",type="string",dest="accumulate_div_const",help="accumulate y and divide by const")
+(options, args) = parser.parse_args()
+
+# Check arguments
+if len(args) == 0:
+    parser.error("Incorrect number of arguments")
+else:
+    CSV_FILES = args
+
+# Check options
+cols = [0,1]
+if(options.columns):
+    try:
+        cols = options.columns.split(":")
+        cols = map(int,cols)
+    except:
+        parser.error("Invalid format for columns")
+
+# Create dictionary of csv file and plot names
+plotTitles = {}
+if(options.plot_titles):
+    titles = options.plot_titles.split(":")
+    if(len(titles) != len(args)):
+        parser.error("Must have one name per column") 
+    for i in range(len(args)):
+        csv = args[i]
+        plotTitles[csv] = titles[i]
+
+yLines = []
+if(options.horiz_lines):
+    try:
+        yLines = options.horiz_lines.split(":")
+        yLines = map(float,yLines)
+    except:
+        parser.error("Invalid format for horizontal lines")
+
+from CSVWriter import *
+if __name__ == '__main__':
+    g = Gnuplot.Gnuplot()
+
+    if(options.outputFile):
+        g("set terminal postscript")
+        g("set output \'%s\'"%(options.outputFile))
+
+    g("set datafile separator ','") # Comma deliminated
+    if(options.default_titles or options.plot_titles):
+        g("set key bottom")
+    else:
+        g("unset key")
+
+    if(options.title):
+        g.title(options.title)
+
+    if(options.xaxis_title):
+        g("set xlabel '%s'" % (options.xaxis_title))
+
+    if(options.xrange):
+        g("set xrange [%s]" % (options.xrange))
+
+    if(options.yrange):
+        g("set yrange [%s]" % (options.yrange))
+
+    if(options.yaxis_title):
+        g("set ylabel '%s'" % (options.yaxis_title))
+
+    plotCmd = "plot"
+
+    if(len(yLines) > 0):
+        for y in yLines:
+            plotCmd += " %d with lines title '%d'" %(y,y)
+            plotCmd += ","
+
+    for csvFile in args:
+
+        for col in cols[1:]:
+
+            if(options.accumulate or options.accumulate_div_const):
+                plotCmd += " sum = 0,"
+            plotCmd += " \"%s\""%(csvFile) # Filename
+
+            if(options.accumulate):
+                plotCmd += " using %d:(sum = sum + $%d)" %(cols[0],col) # X and Y columns
+            elif(options.percent_of_x):
+                g("set yrange [-10:10]")
+                plotCmd += " using 0:((($%d-$%d)/$%d) * 100)" %(cols[0],col,cols[0]) # ( (X-Y) / X) * 100
+            elif(options.y_in_mins):
+                plotCmd += " using %d:($%d/60)" %(cols[0],col) # X,Y/60
+            elif(options.accumulate_div_const):
+                plotCmd += " using %d:((sum = sum + $%d)/%d)" %(cols[0],col,float(options.accumulate_div_const)) # X,Y/3600
+            elif(options.percent_const):
+                plotCmd += " using %d:(($%d/%d)*100)" %(cols[0],col,float(options.percent_const))
+            elif(options.percent_col):
+                plotCmd += " using %d:(($%d/$%d)*100)" %(cols[0],col,int(options.percent_col))
+            else:
+                plotCmd += " using %d:%d" %(cols[0],col) # X and Y columns
+
+            if(options.plot_titles):
+                plotCmd += " title '%s'" %(plotTitles[csvFile])
+
+            # Using lines
+            if options.useLines:
+                plotCmd += " with lines"
+
+            if(csvFile != args[-1]):
+                if(len(cols) > 2): # More than 1 plot from file
+                    if(col != cols[-1]):
+                        plotCmd += ','
+                else:
+                    plotCmd += ','
+            
+    if options.verbose:
+        print "plot command: "+plotCmd
+    g(plotCmd)
